@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy this file to sync-all.config.json and edit the pairs. Each pair syncs photos and albums from `source` to `target`. Paths point at .photoslibrary bundles. The real sync-all.config.json is gitignored.",
+  "pairs": [
+    {
+      "source": "/Volumes/Source/Photos/Family.photoslibrary",
+      "target": "/Volumes/Backup/Photos/Family.photoslibrary"
+    },
+    {
+      "source": "/Volumes/Source/Photos/Travel.photoslibrary",
+      "target": "/Volumes/Backup/Photos/Travel.photoslibrary"
+    }
+  ]
+}
