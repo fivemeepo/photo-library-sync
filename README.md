@@ -86,8 +86,11 @@ library slow to open and browse.
 
 It also **backfills** missing derivatives for photos that are already in the
 target (e.g. synced by an older version that copied only originals), so an
-existing slow target is repaired on the next sync. Files already present are
-skipped, so re-running is cheap.
+existing slow target is repaired on the next sync. This backfill is a one-time
+repair: once it completes, a marker (`.photo_sync_meta/` inside the target
+bundle) records it so later syncs skip the whole-library rescan. New photos
+keep getting their derivatives through the new-photo path above, so nothing is
+missed. (Delete that marker to force a full re-backfill.)
 
 The shared packed thumbnail caches (`derivatives/thumbs/*.ithmb`) and the
 Spotlight-style search index (`database/search/psi.sqlite`) are **not** copied —
