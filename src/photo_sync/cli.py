@@ -194,6 +194,8 @@ def format_result(result, json_output: bool = False, elapsed: float = 0) -> str:
         f"  Albums added: {result.albums_added}",
         f"  Favourites synced: {result.favourites_synced}",
         f"  Files copied: {result.files_copied} ({format_bytes(result.bytes_copied)})",
+        f"  Derivatives copied: {result.derivative_files_copied} "
+        f"({format_bytes(result.derivative_bytes_copied)})",
         f"  Time elapsed: {elapsed:.1f}s",
     ]
 

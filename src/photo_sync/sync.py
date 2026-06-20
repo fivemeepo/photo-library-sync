@@ -24,8 +24,11 @@ from photo_sync.operations.favourite_sync import (
     sync_favourites,
 )
 from photo_sync.operations.file_copy import (
+    backfill_derivatives,
     check_disk_space,
+    copy_asset_derivatives,
     copy_photo_file,
+    get_asset_derivative_size,
     get_photo_file_size,
 )
 from photo_sync.operations.photo_sync import (
@@ -89,9 +92,10 @@ def sync_photos(
             )
 
             if new_photos:
-                # Check disk space
+                # Check disk space (originals + their derivative thumbnails)
                 total_size = sum(
-                    get_photo_file_size(source_lib, asset) or 0
+                    (get_photo_file_size(source_lib, asset) or 0)
+                    + get_asset_derivative_size(source_lib, asset)
                     for asset in new_photos
                 )
                 has_space, available, required = check_disk_space(target_lib, total_size)
@@ -121,9 +125,47 @@ def sync_photos(
                             target_conn.execute("ROLLBACK")
                             raise e
 
+                        # Copy the asset's derivative thumbnails/previews so
+                        # Photos doesn't have to regenerate them on first view.
+                        # Best-effort: a derivative failure never fails the photo
+                        # (Photos can always rebuild them).
+                        try:
+                            d_files, d_bytes = copy_asset_derivatives(
+                                source_lib, target_lib, asset
+                            )
+                            result.derivative_files_copied += d_files
+                            result.derivative_bytes_copied += d_bytes
+                        except Exception as e:
+                            result.warnings.append(
+                                f"Failed to copy derivatives for {asset.uuid}: {e}"
+                            )
+                            logger.warning(
+                                f"Failed to copy derivatives for {asset.uuid}: {e}"
+                            )
+
                     except Exception as e:
                         result.warnings.append(f"Failed to sync photo {asset.uuid}: {e}")
                         logger.warning(f"Failed to sync photo {asset.uuid}: {e}")
+
+            # Phase 1b: Backfill derivatives for photos already in the target.
+            # Photos synced before thumbnail-copying existed have their originals
+            # but no derivatives, so Photos regenerates every thumbnail on view.
+            # This copies the missing ones (skipping any already present).
+            existing_uuids = source_uuids & target_uuids
+            if existing_uuids:
+                logger.info(
+                    f"Backfilling thumbnails for {len(existing_uuids)} existing photos..."
+                )
+                d_files, d_bytes, d_warnings = backfill_derivatives(
+                    source_lib, target_lib, existing_uuids,
+                    progress_callback=(
+                        (lambda c, t, m: report_progress(c, t, m))
+                        if progress_callback else None
+                    ),
+                )
+                result.derivative_files_copied += d_files
+                result.derivative_bytes_copied += d_bytes
+                result.warnings.extend(d_warnings)
 
             # Phase 2: Sync deleted photos
             if not skip_delete:
@@ -312,10 +354,10 @@ def create_sync_plan(
         )
         plan.photos_to_add = [asset.uuid for asset in new_photos]
 
-        # Calculate total size and collect details
+        # Calculate total size and collect details (originals + derivatives)
         for asset in new_photos:
             size = get_photo_file_size(source_lib, asset) or 0
-            plan.total_bytes_to_copy += size
+            plan.total_bytes_to_copy += size + get_asset_derivative_size(source_lib, asset)
             plan.photo_details.append({
                 "uuid": asset.uuid,
                 "filename": asset.filename,
