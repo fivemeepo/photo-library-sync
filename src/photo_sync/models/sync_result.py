@@ -31,6 +31,10 @@ class SyncResult:
     files_copied: int = 0
     bytes_copied: int = 0
 
+    # Derivative (thumbnail/preview) file operations
+    derivative_files_copied: int = 0
+    derivative_bytes_copied: int = 0
+
     # Errors
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -52,6 +56,9 @@ class SyncResult:
             "files_copied": self.files_copied,
             "bytes_copied": self.bytes_copied,
             "bytes_copied_human": format_bytes(self.bytes_copied),
+            "derivative_files_copied": self.derivative_files_copied,
+            "derivative_bytes_copied": self.derivative_bytes_copied,
+            "derivative_bytes_copied_human": format_bytes(self.derivative_bytes_copied),
             "errors": self.errors,
             "warnings": self.warnings,
             "success": self.success,
@@ -67,6 +74,8 @@ class SyncResult:
         self.favourites_synced += other.favourites_synced
         self.files_copied += other.files_copied
         self.bytes_copied += other.bytes_copied
+        self.derivative_files_copied += other.derivative_files_copied
+        self.derivative_bytes_copied += other.derivative_bytes_copied
         self.errors.extend(other.errors)
         self.warnings.extend(other.warnings)
         return self

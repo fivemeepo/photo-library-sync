@@ -5,6 +5,7 @@ Synchronize photos and albums between Apple Photos libraries.
 ## Features
 
 - **Photo Sync**: Copy new photos from source to target library
+- **Thumbnail Sync**: Copy each photo's rendered thumbnails/previews so the target browses fast without regenerating them
 - **Deletion Sync**: Remove photos from target that were deleted from source
 - **Album Sync**: Sync album definitions and photo-album memberships
 - **Favourite Sync**: Sync favourite status between libraries
@@ -75,6 +76,22 @@ pairs), then:
 ### `photo-sync sync`
 
 Synchronize photos and albums from source to target library.
+
+For every new photo this copies the original file **and** its rendered
+derivatives — the grid thumbnail, the display-size preview, video/Live Photo
+transcodes, and edit renders (`resources/derivatives/…` and `resources/renders/…`).
+Without them the target's database still points at derivatives that aren't on
+disk, so Photos has to regenerate every thumbnail on first view, making the
+library slow to open and browse.
+
+It also **backfills** missing derivatives for photos that are already in the
+target (e.g. synced by an older version that copied only originals), so an
+existing slow target is repaired on the next sync. Files already present are
+skipped, so re-running is cheap.
+
+The shared packed thumbnail caches (`derivatives/thumbs/*.ithmb`) and the
+Spotlight-style search index (`database/search/psi.sqlite`) are **not** copied —
+those are rebuilt by Photos itself the first time you open the target.
 
 ```
 ./photo_sync.py sync [OPTIONS] SOURCE TARGET
