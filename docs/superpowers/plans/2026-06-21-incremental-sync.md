@@ -338,7 +338,7 @@ from photo_sync.db.queries import (
     fetch_assets_added_since,
     fetch_assets_trashed_since,
 )
-from tests.unit._photoslib import add_asset, make_db
+from _photoslib import add_asset, make_db
 
 
 def test_asset_invariant_basic():
@@ -366,7 +366,7 @@ def test_fetch_trashed_since():
     assert fetch_assets_trashed_since(conn, 10.0) == [("B", 2)]
 ```
 
-Note: tests import `tests.unit._photoslib`; run pytest from repo root so `tests` is importable, or rely on the repo's existing rootdir config. Use `cd src && pytest ../tests/...` consistently (matches the project gate).
+Note: this project has no `__init__.py` under `tests/` and uses pytest's default prepend import mode, which puts `tests/unit/` on `sys.path`. Import the helper as a top-level module — `from _photoslib import ...` — NOT `from _photoslib import ...`. Run the gate as `cd src && pytest` (collects all of `tests/`) or a single file as `cd src && pytest ../tests/unit/test_x.py`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -454,7 +454,7 @@ git commit -m "feat: asset invariant and delta queries"
 # append to tests/unit/test_incremental_assets.py
 from photo_sync.db.queries import asset_invariant
 from photo_sync.operations.incremental import plan_asset_sync
-from tests.unit._photoslib import add_asset, make_db
+from _photoslib import add_asset, make_db
 
 
 def test_plan_full_when_no_prev():
@@ -605,7 +605,7 @@ git commit -m "feat: asset delta-vs-full decision with checksum verification"
 # tests/unit/test_incremental_membership.py
 from photo_sync.db.queries import membership_invariant
 from photo_sync.operations.incremental import plan_membership_sync
-from tests.unit._photoslib import add_album, add_asset, add_membership, make_db
+from _photoslib import add_album, add_asset, add_membership, make_db
 
 
 def _seed(conn):
@@ -764,7 +764,7 @@ from photo_sync.db.queries import (
     fetch_favourite_candidates_since,
 )
 from photo_sync.operations.incremental import plan_favourite_sync
-from tests.unit._photoslib import add_asset, make_db
+from _photoslib import add_asset, make_db
 
 
 def _register(conn):
@@ -941,7 +941,7 @@ Lower volume — skip-or-full only (no per-row delta).
 # tests/unit/test_incremental_albums.py
 from photo_sync.db.queries import album_defs_invariant
 from photo_sync.operations.incremental import plan_album_defs_sync
-from tests.unit._photoslib import add_album, make_db
+from _photoslib import add_album, make_db
 
 
 def test_skip_when_unchanged():
@@ -1077,7 +1077,7 @@ connections so they're unit-testable. Concretely, add and test:
 # tests/unit/test_sync_incremental.py
 from photo_sync.operations.incremental import plan_asset_sync
 from photo_sync.db.queries import asset_invariant, get_all_asset_uuids
-from tests.unit._photoslib import add_asset, make_db
+from _photoslib import add_asset, make_db
 
 
 def test_second_run_is_noop_for_assets():

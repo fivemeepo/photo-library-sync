@@ -14,7 +14,6 @@ from pathlib import Path
 
 from photo_sync.models import Asset
 from photo_sync.operations.file_copy import (
-    backfill_derivatives,
     copy_asset_derivatives,
     get_asset_derivative_size,
 )
@@ -105,27 +104,3 @@ def test_asset_without_derivatives_is_noop(tmp_path):
     assert get_asset_derivative_size(src, _asset()) == 0
 
 
-def test_backfill_copies_missing_derivatives_by_uuid(tmp_path):
-    # backfill takes bare UUID strings (no Asset.directory) and must derive the
-    # bucket from the UUID's first character.
-    src = _make_source(tmp_path)
-    tgt = tmp_path / "tgt.photoslibrary"
-
-    files, nbytes, warnings = backfill_derivatives(src, tgt, [UUID])
-
-    assert files == ASSET_FILES
-    assert nbytes == ASSET_BYTES
-    assert warnings == []
-    for rel in ASSET_DERIVATIVES:
-        assert (tgt / rel).exists()
-
-
-def test_backfill_unknown_uuid_is_noop(tmp_path):
-    src = _make_source(tmp_path)
-    tgt = tmp_path / "tgt.photoslibrary"
-
-    files, nbytes, warnings = backfill_derivatives(
-        src, tgt, ["FFFFFFFF-0000-0000-0000-000000000000"]
-    )
-
-    assert (files, nbytes, warnings) == (0, 0, [])

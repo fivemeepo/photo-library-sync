@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import shutil
 from pathlib import Path
@@ -11,14 +10,6 @@ from pathlib import Path
 from photo_sync.models import Asset
 
 logger = logging.getLogger(__name__)
-
-# Backfilling derivatives is a one-time repair of a target (see
-# ``backfill_derivatives``). Once a target has been fully backfilled we drop
-# this marker inside its bundle so later syncs skip the whole-library rescan —
-# new photos already get their thumbnails via the new-photo copy path. The
-# marker lives in a tool-namespaced hidden dir so it travels with the library
-# and never collides with Photos' own files.
-BACKFILL_MARKER_RELPATH = Path(".photo_sync_meta") / "derivatives_backfilled.json"
 
 
 class FileCopyError(Exception):
@@ -257,86 +248,6 @@ def copy_asset_derivatives(
     return files, total
 
 
-def backfill_derivatives(
-    source_lib_path: Path,
-    target_lib_path: Path,
-    uuids,
-    progress_callback=None,
-) -> tuple[int, int, list[str]]:
-    """Copy missing derivatives for photos that already exist in the target.
-
-    Photos synced before derivative-copying existed (or by older versions of
-    this tool) have their originals in the target but no thumbnails, so Photos
-    regenerates them on demand. This backfills the missing derivative files for
-    a set of asset UUIDs. Files already present with the same size are skipped,
-    so it is safe and cheap to re-run.
-
-    The on-disk derivative bucket is the first hex char of the UUID, so only the
-    UUID is needed (no database row).
-
-    Args:
-        source_lib_path: Path to source .photoslibrary bundle
-        target_lib_path: Path to target .photoslibrary bundle
-        uuids: Iterable of asset UUIDs present in both libraries
-        progress_callback: Optional callback(current, total, message)
-
-    Returns:
-        Tuple of (files_copied, bytes_copied, warnings).
-    """
-    uuids = list(uuids)
-    files = 0
-    total = 0
-    warnings: list[str] = []
-    for i, uuid in enumerate(uuids):
-        if progress_callback:
-            progress_callback(i + 1, len(uuids), f"Thumbnails {uuid[:8]}")
-        try:
-            asset = Asset(z_pk=0, uuid=uuid)
-            copied_files, copied_bytes = copy_asset_derivatives(
-                source_lib_path, target_lib_path, asset
-            )
-            files += copied_files
-            total += copied_bytes
-        except Exception as e:
-            warnings.append(f"Failed to copy derivatives for {uuid}: {e}")
-            logger.warning(f"Failed to copy derivatives for {uuid}: {e}")
-    return files, total, warnings
-
-
-def derivatives_backfill_marker_path(target_lib_path: Path) -> Path:
-    """Path to the one-time backfill-completed marker inside a target bundle."""
-    return Path(target_lib_path) / BACKFILL_MARKER_RELPATH
-
-
-def is_derivatives_backfilled(target_lib_path: Path) -> bool:
-    """Whether this target has already had its derivatives backfilled once.
-
-    When True, callers should skip the whole-library backfill rescan — there is
-    nothing left to repair, and new photos get their thumbnails via the
-    new-photo copy path instead.
-    """
-    return derivatives_backfill_marker_path(target_lib_path).is_file()
-
-
-def mark_derivatives_backfilled(target_lib_path: Path, uuid_count: int) -> None:
-    """Record that a target's derivatives have been backfilled.
-
-    Writes the marker read by :func:`is_derivatives_backfilled`. The stored
-    ``backfilled_uuids`` count is informational only; the file's mere existence
-    is what makes subsequent syncs skip the rescan.
-
-    Args:
-        target_lib_path: Path to the target .photoslibrary bundle
-        uuid_count: Number of existing-photo UUIDs considered during backfill
-    """
-    marker = derivatives_backfill_marker_path(target_lib_path)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(
-        json.dumps({"version": 1, "backfilled_uuids": uuid_count})
-    )
-    logger.debug(f"Marked derivatives backfilled for {target_lib_path}")
-
-
 def verify_file_copy(source_path: Path, target_path: Path) -> bool:
     """Verify file integrity by comparing SHA256 checksums.
 
@@ -400,10 +311,6 @@ __all__ = [
     "copy_photo_file",
     "get_asset_derivative_size",
     "copy_asset_derivatives",
-    "backfill_derivatives",
-    "derivatives_backfill_marker_path",
-    "is_derivatives_backfilled",
-    "mark_derivatives_backfilled",
     "verify_file_copy",
     "check_disk_space",
 ]

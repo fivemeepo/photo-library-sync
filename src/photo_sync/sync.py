@@ -24,14 +24,11 @@ from photo_sync.operations.favourite_sync import (
     sync_favourites,
 )
 from photo_sync.operations.file_copy import (
-    backfill_derivatives,
     check_disk_space,
     copy_asset_derivatives,
     copy_photo_file,
     get_asset_derivative_size,
     get_photo_file_size,
-    is_derivatives_backfilled,
-    mark_derivatives_backfilled,
 )
 from photo_sync.operations.photo_sync import (
     fetch_asset_uuid_sets,
@@ -148,39 +145,6 @@ def sync_photos(
                     except Exception as e:
                         result.warnings.append(f"Failed to sync photo {asset.uuid}: {e}")
                         logger.warning(f"Failed to sync photo {asset.uuid}: {e}")
-
-            # Phase 1b: One-time backfill of derivatives for photos already in
-            # the target. Photos synced before thumbnail-copying existed have
-            # their originals but no derivatives, so Photos regenerates every
-            # thumbnail on view. This copies the missing ones once; afterwards a
-            # marker in the target makes later syncs skip the whole-library
-            # rescan (new photos get their thumbnails via Phase 1 above).
-            if is_derivatives_backfilled(target_lib):
-                logger.info(
-                    "Derivatives already backfilled for this target; "
-                    "skipping rescan."
-                )
-            else:
-                existing_uuids = source_uuids & target_uuids
-                if existing_uuids:
-                    logger.info(
-                        f"Backfilling thumbnails for {len(existing_uuids)} "
-                        "existing photos..."
-                    )
-                    d_files, d_bytes, d_warnings = backfill_derivatives(
-                        source_lib, target_lib, existing_uuids,
-                        progress_callback=(
-                            (lambda c, t, m: report_progress(c, t, m))
-                            if progress_callback else None
-                        ),
-                    )
-                    result.derivative_files_copied += d_files
-                    result.derivative_bytes_copied += d_bytes
-                    result.warnings.extend(d_warnings)
-                # Mark even when nothing overlapped this run: a fresh target's
-                # new photos were just copied with their derivatives in Phase 1,
-                # so there is nothing for a future run to backfill.
-                mark_derivatives_backfilled(target_lib, len(existing_uuids))
 
             # Phase 2: Sync deleted photos
             if not skip_delete:
