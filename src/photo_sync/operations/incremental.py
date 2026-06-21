@@ -14,6 +14,8 @@ from photo_sync.db.queries import (
     asset_invariant,
     fetch_assets_added_since,
     fetch_assets_trashed_since,
+    fetch_memberships_added_since,
+    membership_invariant,
 )
 
 
@@ -50,3 +52,27 @@ def plan_asset_sync(source_conn: sqlite3.Connection, prev: dict | None) -> Asset
             trashed_uuids=[u for u, _ in prev_active_trashed],
         )
     return AssetPlan(full=True, invariant=cur)
+
+
+@dataclass
+class MembershipPlan:
+    full: bool
+    invariant: dict
+    added: list[tuple[int, int]] = field(default_factory=list)
+
+
+def plan_membership_sync(source_conn: sqlite3.Connection, prev: dict | None) -> MembershipPlan:
+    cur = membership_invariant(source_conn)
+    if not prev:
+        return MembershipPlan(full=True, invariant=cur)
+
+    added = fetch_memberships_added_since(source_conn, prev["max_rowid"])
+    predicted = {
+        "count": prev["count"] + len(added),
+        "album_sum": prev["album_sum"] + sum(a for a, _ in added),
+        "asset_sum": prev["asset_sum"] + sum(p for _, p in added),
+        "prod_sum": prev["prod_sum"] + sum(a * p for a, p in added),
+    }
+    if all(predicted[k] == cur[k] for k in predicted):
+        return MembershipPlan(full=False, invariant=cur, added=added)
+    return MembershipPlan(full=True, invariant=cur)

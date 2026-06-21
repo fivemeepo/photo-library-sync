@@ -728,6 +728,38 @@ def fetch_assets_trashed_since(
     return [(r[0], r[1]) for r in cur.fetchall()]
 
 
+def membership_invariant(conn: sqlite3.Connection) -> dict:
+    """Cheap summary of Z_33ASSETS for membership delta verification.
+
+    Components stay within 64-bit range: album PKs ~1e4, asset PKs ~1e6, so
+    SUM(album*asset) over a personal library stays well under 2**63.
+    """
+    row = conn.execute(
+        "SELECT COUNT(*), COALESCE(MAX(_rowid_), 0), "
+        "COALESCE(SUM(Z_33ALBUMS), 0), COALESCE(SUM(Z_3ASSETS), 0), "
+        "COALESCE(SUM(Z_33ALBUMS * Z_3ASSETS), 0) "
+        "FROM Z_33ASSETS"
+    ).fetchone()
+    return {
+        "count": row[0],
+        "max_rowid": row[1],
+        "album_sum": row[2],
+        "asset_sum": row[3],
+        "prod_sum": row[4],
+    }
+
+
+def fetch_memberships_added_since(
+    conn: sqlite3.Connection, rowid_watermark: int
+) -> list[tuple[int, int]]:
+    """(album_pk, asset_pk) for membership rows inserted since the watermark."""
+    cur = conn.execute(
+        "SELECT Z_33ALBUMS, Z_3ASSETS FROM Z_33ASSETS WHERE _rowid_ > ?",
+        (rowid_watermark,),
+    )
+    return [(r[0], r[1]) for r in cur.fetchall()]
+
+
 __all__ = [
     "get_all_asset_uuids",
     "get_asset_by_uuid",
@@ -748,4 +780,6 @@ __all__ = [
     "asset_invariant",
     "fetch_assets_added_since",
     "fetch_assets_trashed_since",
+    "membership_invariant",
+    "fetch_memberships_added_since",
 ]
