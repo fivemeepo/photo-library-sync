@@ -173,7 +173,7 @@ Core Data per-entity monotonic counter — AUTOINCREMENT-like, never reused).
 ### Album definitions
 
 Lower volume. New albums via a `Z_MAX("GenericAlbum")` delta; renames detectable
-via `ZGENERICALBUM.ZMODIFICATIONDATE`; trashes/removals escalate. Kept
+via `ZGENERICALBUM.ZLASTMODIFIEDDATE`; trashes/removals escalate. Kept
 **checksum-gated** (skip-or-full) to keep scope focused — the full album-def
 comparison is cheap (few rows). Membership (above) is where album-side delta pays
 off.

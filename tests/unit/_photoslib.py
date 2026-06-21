@@ -17,7 +17,7 @@ def make_db() -> sqlite3.Connection:
         CREATE TABLE ZGENERICALBUM (
             Z_PK INTEGER PRIMARY KEY,
             ZUUID TEXT, ZTITLE TEXT, ZKIND INTEGER DEFAULT 2,
-            ZTRASHEDSTATE INTEGER DEFAULT 0, ZMODIFICATIONDATE REAL DEFAULT 0.0
+            ZTRASHEDSTATE INTEGER DEFAULT 0, ZLASTMODIFIEDDATE REAL DEFAULT 0.0
         );
         CREATE TABLE Z_33ASSETS (
             Z_33ALBUMS INTEGER, Z_3ASSETS INTEGER, Z_FOK_3ASSETS INTEGER,
@@ -53,7 +53,7 @@ def add_asset(conn, uuid, *, favorite=0, trashed=0, trashed_date=0.0, mod_date=0
 def add_album(conn, uuid, *, title="A", mod_date=0.0) -> int:
     pk = _next_pk(conn, "GenericAlbum")
     conn.execute(
-        "INSERT INTO ZGENERICALBUM (Z_PK, ZUUID, ZTITLE, ZKIND, ZMODIFICATIONDATE)"
+        "INSERT INTO ZGENERICALBUM (Z_PK, ZUUID, ZTITLE, ZKIND, ZLASTMODIFIEDDATE)"
         " VALUES (?, ?, ?, 2, ?)",
         (pk, uuid, title, mod_date),
     )

@@ -27,6 +27,6 @@ def test_full_on_rename():
     conn = make_db()
     add_album(conn, "a1", mod_date=1.0)
     prev = album_defs_invariant(conn)
-    conn.execute("UPDATE ZGENERICALBUM SET ZTITLE='new', ZMODIFICATIONDATE=9.0 WHERE ZUUID='a1'")
+    conn.execute("UPDATE ZGENERICALBUM SET ZTITLE='new', ZLASTMODIFIEDDATE=9.0 WHERE ZUUID='a1'")
     needs_full, _ = plan_album_defs_sync(conn, prev)
     assert needs_full is True

@@ -806,7 +806,7 @@ def fetch_favourite_candidates_since(
 def album_defs_invariant(conn: sqlite3.Connection) -> dict:
     """Cheap summary of album definitions (ZGENERICALBUM)."""
     row = conn.execute(
-        "SELECT COUNT(*), COALESCE(MAX(ZMODIFICATIONDATE), 0.0) "
+        "SELECT COUNT(*), COALESCE(MAX(ZLASTMODIFIEDDATE), 0.0) "
         "FROM ZGENERICALBUM WHERE ZTRASHEDSTATE = 0"
     ).fetchone()
     return {
