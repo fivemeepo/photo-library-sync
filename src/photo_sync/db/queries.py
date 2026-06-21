@@ -99,65 +99,72 @@ def get_asset_by_uuid(conn: sqlite3.Connection, uuid: str) -> Asset | None:
     )
 
 
+_CHUNK_SIZE = 900  # safely below SQLite SQLITE_MAX_VARIABLE_NUMBER (999 on older builds)
+
+
 def get_assets_by_uuids(conn: sqlite3.Connection, uuids: list[str]) -> list[Asset]:
     """Get multiple assets by their UUIDs.
+
+    The UUID list is chunked into batches of at most _CHUNK_SIZE to avoid
+    exceeding SQLite's SQLITE_MAX_VARIABLE_NUMBER limit on large deltas.
 
     Args:
         conn: SQLite connection
         uuids: List of asset UUIDs
 
     Returns:
-        List of Asset objects
+        List of Asset objects (order follows input chunking order)
     """
     if not uuids:
         return []
 
-    placeholders = ",".join("?" * len(uuids))
-    cursor = conn.execute(
-        f"""
-        SELECT Z_PK, Z_ENT, Z_OPT, ZUUID, ZFILENAME, ZDIRECTORY,
-               ZKIND, ZWIDTH, ZHEIGHT, ZORIENTATION, ZDURATION,
-               ZDATECREATED, ZADDEDDATE, ZMODIFICATIONDATE,
-               ZTRASHEDSTATE, ZTRASHEDDATE, ZFAVORITE, ZHIDDEN,
-               ZVISIBILITYSTATE, ZCOMPLETE, ZUNIFORMTYPEIDENTIFIER,
-               ZPLAYBACKSTYLE, ZSAVEDASSETTYPE,
-               ZADDITIONALATTRIBUTES, ZEXTENDEDATTRIBUTES, ZMOMENT
-        FROM ZASSET
-        WHERE ZUUID IN ({placeholders})
-        """,
-        uuids
-    )
-
     assets = []
-    for row in cursor.fetchall():
-        assets.append(Asset(
-            z_pk=row[0],
-            z_ent=row[1],
-            z_opt=row[2],
-            uuid=row[3],
-            filename=row[4] or "",
-            directory=row[5] or "",
-            kind=row[6] or 0,
-            width=row[7] or 0,
-            height=row[8] or 0,
-            orientation=row[9] or 1,
-            duration=row[10] or 0.0,
-            date_created=row[11] or 0.0,
-            added_date=row[12] or 0.0,
-            modification_date=row[13] or 0.0,
-            trashed_state=row[14] or 0,
-            trashed_date=row[15],
-            favorite=row[16] or 0,
-            hidden=row[17] or 0,
-            visibility_state=row[18] or 0,
-            complete=row[19] if row[19] is not None else 1,
-            uniform_type_identifier=row[20],
-            playback_style=row[21] if row[21] is not None else 1,
-            saved_asset_type=row[22] if row[22] is not None else 3,
-            additional_attributes=row[23],
-            extended_attributes=row[24],
-            moment=row[25],
-        ))
+    for i in range(0, len(uuids), _CHUNK_SIZE):
+        batch = uuids[i : i + _CHUNK_SIZE]
+        placeholders = ",".join("?" * len(batch))
+        cursor = conn.execute(
+            f"""
+            SELECT Z_PK, Z_ENT, Z_OPT, ZUUID, ZFILENAME, ZDIRECTORY,
+                   ZKIND, ZWIDTH, ZHEIGHT, ZORIENTATION, ZDURATION,
+                   ZDATECREATED, ZADDEDDATE, ZMODIFICATIONDATE,
+                   ZTRASHEDSTATE, ZTRASHEDDATE, ZFAVORITE, ZHIDDEN,
+                   ZVISIBILITYSTATE, ZCOMPLETE, ZUNIFORMTYPEIDENTIFIER,
+                   ZPLAYBACKSTYLE, ZSAVEDASSETTYPE,
+                   ZADDITIONALATTRIBUTES, ZEXTENDEDATTRIBUTES, ZMOMENT
+            FROM ZASSET
+            WHERE ZUUID IN ({placeholders})
+            """,
+            batch,
+        )
+        for row in cursor.fetchall():
+            assets.append(Asset(
+                z_pk=row[0],
+                z_ent=row[1],
+                z_opt=row[2],
+                uuid=row[3],
+                filename=row[4] or "",
+                directory=row[5] or "",
+                kind=row[6] or 0,
+                width=row[7] or 0,
+                height=row[8] or 0,
+                orientation=row[9] or 1,
+                duration=row[10] or 0.0,
+                date_created=row[11] or 0.0,
+                added_date=row[12] or 0.0,
+                modification_date=row[13] or 0.0,
+                trashed_state=row[14] or 0,
+                trashed_date=row[15],
+                favorite=row[16] or 0,
+                hidden=row[17] or 0,
+                visibility_state=row[18] or 0,
+                complete=row[19] if row[19] is not None else 1,
+                uniform_type_identifier=row[20],
+                playback_style=row[21] if row[21] is not None else 1,
+                saved_asset_type=row[22] if row[22] is not None else 3,
+                additional_attributes=row[23],
+                extended_attributes=row[24],
+                moment=row[25],
+            ))
 
     return assets
 
@@ -770,7 +777,13 @@ def favourite_state(conn: sqlite3.Connection) -> dict:
 
 
 def favourite_set_summary(conn: sqlite3.Connection) -> tuple[int, int]:
-    """(count, uuid_checksum) over active favourites — UUID-based, cross-library."""
+    """(count, uuid_checksum) over active favourites — UUID-based, cross-library.
+
+    The uuid_checksum is SUM(CRC32(uuid)), which is a heuristic — it is not
+    collision-proof (two different favourite sets could share the same sum).
+    Use ``--full`` as the deterministic fallback when precise verification
+    is required.
+    """
     row = conn.execute(
         "SELECT COUNT(*), COALESCE(SUM(_uuid_checksum(ZUUID)), 0) "
         "FROM ZASSET WHERE ZFAVORITE = 1 AND ZTRASHEDSTATE = 0"

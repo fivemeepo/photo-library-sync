@@ -243,16 +243,29 @@ def _resolve_membership_uuids(
     return resolved
 
 
+_PK_CHUNK_SIZE = 900  # safely below SQLite SQLITE_MAX_VARIABLE_NUMBER
+
+
 def _pk_to_uuid(conn, table: str, pks: set[int]) -> dict[int, str]:
-    """Map Z_PK -> ZUUID for the given table and set of PKs."""
+    """Map Z_PK -> ZUUID for the given table and set of PKs.
+
+    The PK list is chunked into batches of at most _PK_CHUNK_SIZE to avoid
+    exceeding SQLite's SQLITE_MAX_VARIABLE_NUMBER limit on large deltas.
+    """
     if not pks:
         return {}
-    placeholders = ",".join("?" * len(pks))
-    cursor = conn.execute(
-        f"SELECT Z_PK, ZUUID FROM {table} WHERE Z_PK IN ({placeholders})",
-        list(pks),
-    )
-    return {row[0]: row[1] for row in cursor.fetchall()}
+    result: dict[int, str] = {}
+    pk_list = list(pks)
+    for i in range(0, len(pk_list), _PK_CHUNK_SIZE):
+        batch = pk_list[i : i + _PK_CHUNK_SIZE]
+        placeholders = ",".join("?" * len(batch))
+        cursor = conn.execute(
+            f"SELECT Z_PK, ZUUID FROM {table} WHERE Z_PK IN ({placeholders})",
+            batch,
+        )
+        for row in cursor.fetchall():
+            result[row[0]] = row[1]
+    return result
 
 
 def sync_photos(
@@ -271,8 +284,9 @@ def sync_photos(
     state saved by the last run, and only the delta is applied. If the delta
     cannot be proven to fully explain the change, that dimension escalates to a
     full source-vs-target comparison for this run. State is persisted at the end
-    for every dimension that completed without raising, so a dimension that
-    fails re-runs next time from its previous watermark.
+    only for dimensions that both completed without raising AND applied every
+    item without a per-item warning. A dimension that fails (raised exception or
+    any per-item warning) keeps its previous watermark so it re-runs next time.
 
     Args:
         source_lib: Path to source .photoslibrary
@@ -334,6 +348,7 @@ def sync_photos(
                     )
                     deleted_uuids = [] if skip_delete else plan.trashed_uuids
 
+                warnings_before_assets = len(result.warnings)
                 had_space = _apply_new_photos(
                     source_lib, target_lib, source_conn, target_conn,
                     new_assets, result, report_progress,
@@ -344,7 +359,12 @@ def sync_photos(
                     _apply_deleted_photos(
                         target_conn, deleted_uuids, result, report_progress
                     )
-                new_state["assets"] = plan.invariant
+                # Only advance the watermark if every item applied cleanly
+                # (no new per-item warnings). Over-escalation is the safe direction.
+                if len(result.warnings) > warnings_before_assets:
+                    asset_ok = False
+                else:
+                    new_state["assets"] = plan.invariant
             except Exception as e:  # noqa: BLE001 - record, don't abort other dimensions
                 asset_ok = False
                 result.warnings.append(f"Asset sync failed: {e}")
@@ -436,6 +456,7 @@ def sync_photos(
                     m_plan = plan_membership_sync(
                         source_conn, None if full else state.get("membership")
                     )
+                    warnings_before_membership = len(result.warnings)
                     if m_plan.full:
                         logger.info("Syncing album memberships (full comparison)...")
                         _apply_membership_full(source_conn, target_conn, result)
@@ -456,14 +477,21 @@ def sync_photos(
                         except Exception as e:
                             target_conn.execute("ROLLBACK")
                             raise e
-                    new_state["membership"] = m_plan.invariant
+                    # Only advance the watermark if every item applied cleanly
+                    # (no new per-item warnings). Over-escalation is the safe direction.
+                    if len(result.warnings) > warnings_before_membership:
+                        membership_ok = False
+                    else:
+                        new_state["membership"] = m_plan.invariant
                 except Exception as e:  # noqa: BLE001 - record, don't abort other dimensions
                     membership_ok = False
                     result.warnings.append(f"Membership sync failed: {e}")
                     logger.warning(f"Membership sync failed: {e}")
 
-            # Persist state for dimensions that completed cleanly; a failed
-            # dimension keeps its previous watermark so it re-runs next time.
+            # Persist state for dimensions that completed without raising AND
+            # applied every item cleanly (no per-item warnings). A dimension that
+            # raised or had any per-item warning keeps its previous watermark so
+            # it re-runs next time (over-escalation is the safe direction).
             to_save = dict(state)
             if asset_ok and "assets" in new_state:
                 to_save["assets"] = new_state["assets"]
