@@ -383,6 +383,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Verify file integrity after copy",
     )
+    sync_parser.add_argument(
+        "--full", "--reconcile",
+        dest="full",
+        action="store_true",
+        help="Ignore incremental state; do a full comparison of all dimensions",
+    )
 
     # --- dedup subcommand ---
     dedup_parser = subparsers.add_parser(
@@ -463,6 +469,12 @@ def create_parser() -> argparse.ArgumentParser:
         "--verify",
         action="store_true",
         help="Verify file integrity after copy",
+    )
+    sync_all_parser.add_argument(
+        "--full", "--reconcile",
+        dest="full",
+        action="store_true",
+        help="Ignore incremental state; do a full comparison of all dimensions",
     )
 
     # --- fix-trash subcommand ---
@@ -546,6 +558,7 @@ def run_sync(parsed: argparse.Namespace) -> int:
                 skip_delete=parsed.no_delete,
                 skip_albums=parsed.no_albums,
                 verify=parsed.verify,
+                full=parsed.full,
                 progress_callback=None if parsed.quiet else progress_callback,
             )
 
@@ -853,6 +866,7 @@ def run_sync_all(parsed: argparse.Namespace) -> int:
                     skip_delete=parsed.no_delete,
                     skip_albums=parsed.no_albums,
                     verify=parsed.verify,
+                    full=parsed.full,
                     progress_callback=None if parsed.quiet else progress_callback,
                 )
                 elapsed = time.time() - start_time
