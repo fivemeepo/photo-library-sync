@@ -11,6 +11,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from photo_sync.db.queries import (
+    album_defs_invariant,
     asset_invariant,
     favourite_set_summary,
     favourite_state,
@@ -106,3 +107,18 @@ def plan_favourite_sync(
             full=False, state=state, candidate_uuids=[u for u, _ in candidates]
         )
     return FavouritePlan(full=True, state=state)
+
+
+def plan_album_defs_sync(
+    source_conn: sqlite3.Connection, prev: dict | None
+) -> tuple[bool, dict]:
+    """Skip-or-full decision for album definitions.
+
+    Returns:
+        (needs_full, invariant) where needs_full is True if prev is empty or
+        any invariant component changed.
+    """
+    cur = album_defs_invariant(source_conn)
+    if not prev:
+        return True, cur
+    return (cur != prev), cur

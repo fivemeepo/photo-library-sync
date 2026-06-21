@@ -790,6 +790,19 @@ def fetch_favourite_candidates_since(
     return [(r[0], r[1]) for r in cur.fetchall()]
 
 
+def album_defs_invariant(conn: sqlite3.Connection) -> dict:
+    """Cheap summary of album definitions (ZGENERICALBUM)."""
+    row = conn.execute(
+        "SELECT COUNT(*), COALESCE(MAX(ZMODIFICATIONDATE), 0.0) "
+        "FROM ZGENERICALBUM WHERE ZTRASHEDSTATE = 0"
+    ).fetchone()
+    return {
+        "album_zmax": get_current_max_pk(conn, "GenericAlbum"),
+        "active_count": row[0],
+        "mod_max": row[1],
+    }
+
+
 __all__ = [
     "get_all_asset_uuids",
     "get_asset_by_uuid",
@@ -807,6 +820,7 @@ __all__ = [
     "get_album_key_assets_with_uuids",
     "get_album_by_title",
     "get_album_assets_for_dedup",
+    "album_defs_invariant",
     "asset_invariant",
     "fetch_assets_added_since",
     "fetch_assets_trashed_since",
