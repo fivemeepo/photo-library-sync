@@ -87,7 +87,7 @@ Shape:
     "source_count": 18000,
     "source_checksum": 99887766      // SUM(Z_33ALBUMS*BIG + Z_3ASSETS)
   },
-  "favourites": { "source_count": 120, "source_pk_sum": 8123, "source_pk_sqsum": 661 },
+  "favourites": { "source_max_mod_date": 0.0, "source_count": 120, "source_pk_sum": 8123, "source_pk_sqsum": 661 },
   "albums":     { "source_album_zmax": 220, "source_active_count": 60, "source_mod_max": 0.0 }
 }
 ```
@@ -150,15 +150,33 @@ Core Data per-entity monotonic counter — AUTOINCREMENT-like, never reused).
   and be missed by delta_add. The checksum mismatch escalates to full → still
   never missed.
 
-### Favourites & album definitions
+### Favourites
 
-Lower volume and no reliable per-row "changed-since" signal (favourite toggles
-are not known to bump `ZMODIFICATIONDATE`; verify empirically before relying on
-it). Keep these **checksum-gated**: cheap invariant unchanged → skip; changed →
-run today's full comparison (both are single-column/low-row and cheap). New
-albums may use a `Z_MAX("GenericAlbum")` delta; renames/removals escalate. This
-keeps the implementation focused on where delta pays off most (assets,
-membership) without sacrificing correctness elsewhere.
+- delta candidates = `SELECT ZUUID, ZFAVORITE FROM ZASSET WHERE ZMODIFICATIONDATE > source_max_mod_date AND ZTRASHEDSTATE = 0`.
+  `ZMODIFICATIONDATE` bumps on *any* edit, so this is an over-approximation — for
+  each candidate whose `ZFAVORITE` differs from target, apply via the existing
+  `sync_favourites`.
+- **Verification (the correctness guarantee, independent of mod-date behavior):**
+  favourite invariant = `{count, pk_sum = SUM(Z_PK), pk_sqsum = SUM(Z_PK*Z_PK)}`
+  over `ZFAVORITE=1 AND ZTRASHEDSTATE=0`. Predict it from the old invariant plus
+  the favourite transitions among the delta candidates; if `predicted == current`
+  → the candidate set fully explains the favourite change → done. Else → escalate
+  to the full favourite diff this run.
+- **Correctness does not depend on whether favouriting bumps `ZMODIFICATIONDATE`.**
+  If it does, the change shows up in the delta candidates → efficient delta path.
+  If it does *not*, the candidate set misses it, the checksum mismatches, and we
+  escalate to full → still never missed, only less efficient. Planning verifies
+  empirically (on a scratch library) how reliably the bump occurs, which sets how
+  often the delta path succeeds; if it proves unreliable, favourites degrade
+  gracefully to checksum-gated full.
+
+### Album definitions
+
+Lower volume. New albums via a `Z_MAX("GenericAlbum")` delta; renames detectable
+via `ZGENERICALBUM.ZMODIFICATIONDATE`; trashes/removals escalate. Kept
+**checksum-gated** (skip-or-full) to keep scope focused — the full album-def
+comparison is cheap (few rows). Membership (above) is where album-side delta pays
+off.
 
 ## Control flow & save discipline
 
@@ -206,7 +224,9 @@ finish it on the current version before upgrading.
   - **restore (untrash)** → invariant drifts → escalates to full;
   - **hard-delete** → escalates;
   - membership add-only → delta path; **membership remove / move** → escalates;
-  - rowid-reuse synthetic case → escalates (never missed).
+  - rowid-reuse synthetic case → escalates (never missed);
+  - favourite toggle with `ZMODIFICATIONDATE` bumped → delta path applies, reconciles;
+  - **favourite changed without a mod-date bump** (synthetic) → checksum mismatch → escalates (never missed).
 - **Verification soundness:** for each "escalate" case, assert the full path runs
   and the change is applied.
 - **Lifecycle:** missing/corrupt/old-`version` state → all dimensions full; a
@@ -227,7 +247,9 @@ finish it on the current version before upgrading.
   tool and no concurrent syncs into one target (same assumption the existing
   marker and dedup flow already make). Direct target edits that drift the
   invariant simply trigger a full pass.
-- **Favourite signal:** no confirmed per-row "changed-since" marker, so favourites
-  stay checksum-gated rather than delta-fetched.
+- **Favourite signal:** favourites are delta-fetched via `ZMODIFICATIONDATE`; the
+  favourite checksum guarantees correctness even if a toggle does not bump it
+  (mismatch → escalate). Planning verifies on a scratch library how reliably the
+  bump occurs, which sets how often the delta path succeeds vs degrades to full.
 - **Checksum collisions:** statistically negligible with the chosen
   count+sum(+product/sq) components; `--full` is the deterministic fallback.
