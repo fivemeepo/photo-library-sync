@@ -760,6 +760,36 @@ def fetch_memberships_added_since(
     return [(r[0], r[1]) for r in cur.fetchall()]
 
 
+def favourite_state(conn: sqlite3.Connection) -> dict:
+    """Watermark for the favourite candidate query: global max mod-date (active)."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(ZMODIFICATIONDATE), 0.0) "
+        "FROM ZASSET WHERE ZTRASHEDSTATE = 0"
+    ).fetchone()
+    return {"max_mod_date": row[0]}
+
+
+def favourite_set_summary(conn: sqlite3.Connection) -> tuple[int, int]:
+    """(count, uuid_checksum) over active favourites — UUID-based, cross-library."""
+    row = conn.execute(
+        "SELECT COUNT(*), COALESCE(SUM(_uuid_checksum(ZUUID)), 0) "
+        "FROM ZASSET WHERE ZFAVORITE = 1 AND ZTRASHEDSTATE = 0"
+    ).fetchone()
+    return (row[0], row[1])
+
+
+def fetch_favourite_candidates_since(
+    conn: sqlite3.Connection, mod_date_watermark: float
+) -> list[tuple[str, int]]:
+    """(uuid, favorite) for active assets modified since the watermark."""
+    cur = conn.execute(
+        "SELECT ZUUID, ZFAVORITE FROM ZASSET "
+        "WHERE ZTRASHEDSTATE = 0 AND ZMODIFICATIONDATE > ?",
+        (mod_date_watermark,),
+    )
+    return [(r[0], r[1]) for r in cur.fetchall()]
+
+
 __all__ = [
     "get_all_asset_uuids",
     "get_asset_by_uuid",
@@ -782,4 +812,7 @@ __all__ = [
     "fetch_assets_trashed_since",
     "membership_invariant",
     "fetch_memberships_added_since",
+    "favourite_state",
+    "favourite_set_summary",
+    "fetch_favourite_candidates_since",
 ]

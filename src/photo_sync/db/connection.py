@@ -70,6 +70,13 @@ def _register_core_data_stubs(conn: sqlite3.Connection) -> None:
 
     logger.debug("Registered Core Data trigger stub functions")
 
+    # Deterministic checksum used by incremental favourite verification.
+    import zlib
+
+    conn.create_function(
+        "_uuid_checksum", 1, lambda s: zlib.crc32(s.encode()) if s else 0
+    )
+
 
 def connect_with_retry(
     db_path: str | Path,
