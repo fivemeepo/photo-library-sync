@@ -96,16 +96,27 @@ The shared packed thumbnail caches (`derivatives/thumbs/*.ithmb`) and the
 Spotlight-style search index (`database/search/psi.sqlite`) are **not** copied —
 those are rebuilt by Photos itself the first time you open the target.
 
+#### Incremental sync
+
+By default, `sync` records per-target state in `.photo_sync_meta/sync_state.json`
+and on subsequent runs syncs only changes since the last completed sync. The tool
+automatically falls back to a full comparison for any dimension whose cheap
+checksum shows an untrackable change — e.g., an album-membership removal or move,
+or a deletion older than the Recently-Deleted window. Use `--full` to force a
+complete reconciliation of the entire library. Note that dry-run mode (`-n`)
+always performs a full comparison.
+
 ```
 ./photo_sync.py sync [OPTIONS] SOURCE TARGET
 ```
 
 | Option | Description |
 |--------|-------------|
-| `-n, --dry-run` | Preview changes without executing |
+| `-n, --dry-run` | Preview changes without executing (always performs full comparison) |
 | `-j, --json` | Output in JSON format |
 | `-v, --verbose` | Enable verbose logging |
 | `-q, --quiet` | Suppress non-error output |
+| `--full, --reconcile` | Ignore incremental state and re-compare the whole library |
 | `--no-delete` | Skip deletion sync (add-only mode) |
 | `--no-albums` | Skip album sync (photos only) |
 | `--verify` | Verify file integrity after copy |
@@ -139,6 +150,7 @@ personal paths stay local.
 |--------|-------------|
 | `--config PATH` | JSON file listing library pairs (default: `sync-all.config.json`) |
 | `-n, --dry-run` | Preview changes for all libraries without executing |
+| `--full, --reconcile` | Ignore incremental state and re-compare the whole library |
 | `-v, --verbose` | Enable verbose logging |
 | `-q, --quiet` | Suppress non-error output |
 | `--no-delete` | Skip deletion sync (add-only mode) |

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+import zlib
 from pathlib import Path
 from typing import Literal
 
@@ -69,6 +70,11 @@ def _register_core_data_stubs(conn: sqlite3.Connection) -> None:
         conn.create_function(func_name, -1, lambda *args: None)
 
     logger.debug("Registered Core Data trigger stub functions")
+
+    # Deterministic checksum used by incremental favourite verification.
+    conn.create_function(
+        "_uuid_checksum", 1, lambda s: zlib.crc32(s.encode()) if s else 0
+    )
 
 
 def connect_with_retry(
